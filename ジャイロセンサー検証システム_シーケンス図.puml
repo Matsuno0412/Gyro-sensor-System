@@ -1,0 +1,8 @@
+@startuml ジャイロセンサー検証システム_シーケンス図
+
+legend top
+[ジャイロセンサー検証システム_シーケンス図]
+[KAMOGAWorks] []
+endlegend
+
+@enduml

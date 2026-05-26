@@ -1,0 +1,12 @@
+@startuml ジャイロセンサー検証システム_ステートマシン図
+
+skinparam ActivityDiamondFontSize 12
+skinparam ActivityFontSize 12
+skinparam StateFontSize 12
+
+legend top
+[ジャイロセンサー検証システム_ステートマシン図]
+[KAMOGAWorks] []
+endlegend
+
+@enduml
