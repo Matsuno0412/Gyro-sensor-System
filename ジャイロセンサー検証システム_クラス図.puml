@@ -1,8 +1,127 @@
-@startuml ジャイロセンサー検証システム_クラス図
+﻿@startuml ジャイロセンサー検証システム_クラス図
 
 legend top
 [ジャイロセンサー検証システム_クラス図]
 [KAMOGAWorks] []
 endlegend
+
+' =========================================================
+' インターフェース定義（SPIKE-RT APIの抽象化）
+' =========================================================
+
+' IMU操作用インターフェース。
+' SPIKE-RT APIへの直接依存を隠蔽し、
+' MeasurementControllerからハードウェア依存を分離する。
+' 角速度・加速度はAPI仕様に合わせてX/Y/Z軸のfloat[3]で扱う。
+interface ISensorController {
+  +initialize(): boolean
+  +calibrate(): boolean
+  +getAngularVelocity(): float[3]
+  +getAcceleration(): float[3]
+  +getTemperature(): float
+}
+
+' 計測開始・終了トリガー用インターフェース。
+' フォースセンサーのON後OFF検出を抽象化する。
+interface ITriggerSensor {
+  +initialize(port: String): boolean
+  +detectOnToOff(): boolean
+}
+
+' 計測データ出力インターフェース。
+' CSV出力の方式差し替えなどを可能にする。
+interface IDataOutput {
+  +output(data: SamplingData): void
+}
+
+' =========================================================
+' 実装クラス群
+' =========================================================
+
+' SPIKE-RT IMU API実装クラス。
+' hub_imu_get_angular_velocity(), hub_imu_get_acceleration(),
+' hub_imu_get_temperature() を利用して生データを取得する。
+class GyroSensorController {
+  +initialize(): boolean
+  +calibrate(): boolean
+  +getAngularVelocity(): float[3]
+  +getAcceleration(): float[3]
+  +getTemperature(): float
+}
+
+' フォースセンサー制御クラス。
+' ON後OFFによるトリガー検出を担当する。
+class ForceSensor {
+  +initialize(port: String): boolean
+  +detectOnToOff(): boolean
+}
+
+' SamplingDataをCSV形式へ変換し、
+' 標準出力へリアルタイム出力する。
+class CsvDataOutput {
+  +output(data: SamplingData): void
+}
+
+' 時刻取得およびサンプリング周期制御を担当。
+class Timer {
+  +getCurrentDateTime(): DateTime
+  +waitInterval(ms: int): void
+}
+
+' インターフェース実装
+GyroSensorController .up.|> ISensorController
+ForceSensor .up.|> ITriggerSensor
+CsvDataOutput .up.|> IDataOutput
+
+' =========================================================
+' 計測制御（システム中枢）
+' =========================================================
+
+' システム全体の計測フロー制御を担当する中枢クラス。
+' フォースセンサーON後OFFをトリガーとして
+' 計測開始・終了を制御する。
+class MeasurementController {
+  -samplingInterval: int = 100
+  -isMeasuring: boolean
+  +start(): void
+  -waitForTrigger(): void
+  -runMeasurementLoop(): void
+  -stopMeasurement(): void
+}
+
+' =========================================================
+' サンプリングデータ
+' =========================================================
+
+class DateTime <<external>> {
+}
+
+' 1回分のサンプリング結果を保持するデータクラス。
+' APIから取得したfloat型の生データをそのまま保持する。
+' カラーセンサー検証システムと同様に、日時情報はDateTimeとして保持する。
+class SamplingData {
+  -dateTime: DateTime
+  -gyroX: float
+  -gyroY: float
+  -gyroZ: float
+  -accelX: float
+  -accelY: float
+  -accelZ: float
+  -temperature: float
+  --
+  +SamplingData(angularVelocity: float[3], acceleration: float[3], temperature: float, dt: DateTime)
+}
+
+' =========================================================
+' 関係定義
+' =========================================================
+
+MeasurementController --> ISensorController
+MeasurementController --> ITriggerSensor
+MeasurementController --> Timer
+MeasurementController --> IDataOutput
+MeasurementController ..> SamplingData
+CsvDataOutput ..> SamplingData
+SamplingData ..> DateTime
 
 @enduml

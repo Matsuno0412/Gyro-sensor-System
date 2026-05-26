@@ -1,8 +1,114 @@
-@startuml ジャイロセンサー検証システム_シーケンス図
+﻿@startuml ジャイロセンサー検証システム_シーケンス図
 
 legend top
 [ジャイロセンサー検証システム_シーケンス図]
 [KAMOGAWorks] []
 endlegend
 
+actor User
+
+' クラス図の依存関係に準拠したライフライン定義
+participant "MeasurementController" as MC
+participant "ITriggerSensor" as FS
+participant "ISensorController" as Sensor
+participant "Timer" as Timer
+participant "SamplingData" as Data
+participant "IDataOutput" as Output
+
+' =========================================================
+' 1. 初期化フェーズ
+' =========================================================
+== 1. 初期化フェーズ ==
+
+' 開発者がシステムを起動。MeasurementControllerが制御を開始する。
+User -> MC : start()
+
+' ISensorControllerインターフェースを介してIMUを初期化。
+' 実装クラス(GyroSensorController)のSPIKE-RT API依存を隠蔽する。
+MC -> Sensor : initialize()
+Sensor --> MC : success
+
+' ITriggerSensorインターフェースを介してフォースセンサーを初期化。
+MC -> FS : initialize(port)
+FS --> MC : success
+
+' =========================================================
+' 2. 待機状態フェーズ
+' =========================================================
+== 2. 待機状態フェーズ ==
+
+' 内部メソッド waitForTrigger() の処理に対応。
+' フォースセンサーがON後OFFになるまでブロッキング（またはループ監視）する。
+loop フォースセンサーON後OFF検出まで
+    MC -> FS : detectOnToOff()
+    FS --> MC : detected = false
+end
+
+' 計測開始トリガーを検知したため、
+' 計測開始前に静止状態でキャリブレーションを実行する。
+MC -> Sensor : calibrate()
+Sensor --> MC : success
+
+' =========================================================
+' 3. サンプリング計測ループフェーズ
+' =========================================================
+== 3. サンプリング計測ループフェーズ ==
+
+' 内部メソッド runMeasurementLoop() の処理に対応。
+' フォースセンサーが再度ON後OFFになるまで、
+' samplingInterval に基づく周期でリアルタイム処理を行う。
+loop フォースセンサー再度ON後OFF検出まで
+
+    ' --- センサーデータ取得 ---
+    ' 各種SPIKE-RT IMU APIから生データを取得する。
+
+    MC -> Sensor : getAngularVelocity()
+    Sensor --> MC : angularVelocity[3]
+
+    MC -> Sensor : getAcceleration()
+    Sensor --> MC : acceleration[3]
+
+    MC -> Sensor : getTemperature()
+    Sensor --> MC : temperature
+
+    ' --- 時刻情報の取得 ---
+    ' CSVの1項目目(datetime)となる現在日時をTimerクラスから取得。
+    MC -> Timer : getCurrentDateTime()
+    Timer --> MC : dt
+
+    ' --- データカプセル化 ---
+    ' 1回分のサンプリング結果を保持する使い捨てのデータオブジェクトを生成。
+    ' システム側でのノイズ除去や温度補正は行わず、生データをそのまま格納する。
+    create Data
+    MC -> Data : new(angularVelocity, acceleration, temperature, dt)
+
+    ' --- リアルタイム出力 ---
+    ' IDataOutputインターフェースを介してデータを出力。
+    ' 実装クラス(CsvDataOutput)が標準出力へCSV形式でリアルタイム表示を行う。
+    MC -> Output : output(Data)
+
+    ' --- 周期制御 ---
+    ' samplingInterval に基づき次回サンプリングまで待機する。
+    MC -> Timer : waitInterval(samplingInterval)
+
+    ' --- 継続判定 ---
+    ' ループ終端で再度フォースセンサー状態を確認する。
+    MC -> FS : detectOnToOff()
+    FS --> MC : detected = false
+
+end
+
+' =========================================================
+' 4. 計測終了フェーズ
+' =========================================================
+== 4. 計測終了フェーズ ==
+
+' フォースセンサー再度ON後OFFを検知したため計測終了。
+FS --> MC : detected = true
+
+' stopMeasurement() を呼び出し、
+' 内部状態(isMeasuring)更新などの終了処理を実施する。
+MC -> MC : stopMeasurement()
+
 @enduml
+

@@ -1,4 +1,4 @@
-@startuml ジャイロセンサー検証システム_アクティビティ図
+﻿@startuml ジャイロセンサー検証システム_アクティビティ図
 
 skinparam ActivityDiamondFontSize 12
 skinparam ActivityFontSize 12
@@ -9,6 +9,46 @@ legend top
 endlegend
 
 start
+
+:デバイス初期化（IMU・フォースセンサー）;
+
+:フォースセンサーON後、OFFになるのを待つ;
+
+:キャリブレーションを実行;
+
+:停止要求フラグをfalseにする;
+
+fork
+
+partition データ計測・出力ループ {
+
+    repeat
+
+        :各種API値（X/Y/Z軸の角速度・加速度・温度）を取得;
+
+        :計測結果をカンマ区切りで標準出力へ表示;
+
+        :0.1秒待機;
+
+    repeat while (停止要求フラグがtrueか?) is (いいえ) not (はい)
+
+}
+
+fork again
+
+partition 停止割り込み処理 {
+
+    :フォースセンサー再度ONを検知;
+
+    :フォースセンサーOFFを検知;
+
+    :停止要求フラグをtrueにする;
+
+}
+
+end fork
+
+:計測終了;
 
 stop
 
