@@ -6,7 +6,7 @@ skinparam StateFontSize 12
 
 legend top
 [ジャイロセンサー検証システム_ステートマシン図]
-[KAMOGAWorks] []
+[KAMOGAWorks] [松野]
 endlegend
 
 [*] --> 初期化状態
