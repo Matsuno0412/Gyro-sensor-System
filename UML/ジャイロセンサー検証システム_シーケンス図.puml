@@ -16,6 +16,11 @@ participant "SamplingData" as Data
 participant "IDataOutput" as Output
 participant "IErrorHandler" as Error
 
+note over MC, Error
+  handleError() の内部で
+  IErrorHandler.notifyError() を呼び出す
+end note
+
 ' =========================================================
 ' 1. 初期化フェーズ
 ' =========================================================
@@ -30,9 +35,9 @@ MC -> Sensor : initialize()
 Sensor --> MC : success
 
 break success = false
-    MC -> Error : notifyError("IMU初期化失敗")
-    MC -> MC : stopMeasurement()
+    MC -> MC : handleError("IMU初期化失敗")
     note right of MC
+      エラー通知を行い、
       計測を開始せず安全終了する
     end note
 end
@@ -42,9 +47,9 @@ MC -> FS : initialize(port)
 FS --> MC : success
 
 break success = false
-    MC -> Error : notifyError("フォースセンサー初期化失敗")
-    MC -> MC : stopMeasurement()
+    MC -> MC : handleError("フォースセンサー初期化失敗")
     note right of MC
+      エラー通知を行い、
       計測を開始せず安全終了する
     end note
 end
@@ -63,13 +68,14 @@ end
 
 ' 計測開始トリガーを検知したため、
 ' 計測開始前に静止状態でキャリブレーションを実行する。
+' 専用APIではなく、静止状態の基準値をゼロ点補正用として保持する。
 MC -> Sensor : calibrate()
 Sensor --> MC : success
 
 break success = false
-    MC -> Error : notifyError("キャリブレーション失敗")
-    MC -> MC : stopMeasurement()
+    MC -> MC : handleError("キャリブレーション失敗")
     note right of MC
+      エラー通知を行い、
       計測を開始せず安全終了する
     end note
 end
@@ -82,7 +88,7 @@ end
 ' 内部メソッド runMeasurementLoop() の処理に対応。
 ' フォースセンサーが再度ON後OFFになるまで、
 ' samplingInterval に基づく周期でリアルタイム処理を行う。
-loop フォースセンサー再度ON後OFF検出まで
+loop 停止要求または異常終了要求まで
 
     ' --- センサーデータ取得 ---
     ' 各種SPIKE-RT IMU APIから生データを取得する。
@@ -114,36 +120,41 @@ loop フォースセンサー再度ON後OFF検出まで
     MC -> Output : output(Data)
     Output --> MC : success
 
-    break success = false
-        MC -> Error : notifyError("CSV出力失敗")
-        MC -> MC : stopMeasurement()
+    alt success = false
+        MC -> MC : handleError("CSV出力失敗")
         note right of MC
-          可能な範囲で安全終了する
+          エラー通知と異常終了要求の設定だけを行い、
+          終了処理は終了フェーズで一度だけ実行する
         end note
+    else success = true
+        ' --- 周期制御 ---
+        ' samplingInterval に基づき次回サンプリングまで待機する。
+        ' 100ms周期を超過しても異常終了せず、取得できたデータの出力を継続する。
+        MC -> Timer : waitInterval(samplingInterval)
+
+        ' --- 継続判定 ---
+        ' ループ終端で再度フォースセンサー状態を確認する。
+        MC -> FS : detectOnToOff()
+        FS --> MC : detected
     end
-
-    ' --- 周期制御 ---
-    ' samplingInterval に基づき次回サンプリングまで待機する。
-    ' 100ms周期を超過しても異常終了せず、取得できたデータの出力を継続する。
-    MC -> Timer : waitInterval(samplingInterval)
-
-    ' --- 継続判定 ---
-    ' ループ終端で再度フォースセンサー状態を確認する。
-    MC -> FS : detectOnToOff()
-    FS --> MC : detected = false
 
 end
 
 ' =========================================================
-' 4. 計測終了フェーズ
+' 4. 終了フェーズ
 ' =========================================================
-== 4. 計測終了フェーズ ==
+== 4. 終了フェーズ ==
 
-' フォースセンサー再度ON後OFFを検知したため計測終了。
-FS --> MC : detected = true
-
-' stopMeasurement() を呼び出し、
-' 内部状態(isMeasuring)更新などの終了処理を実施する。
-MC -> MC : stopMeasurement()
+alt 異常終了要求あり
+    ' CSV出力失敗などを検知したため安全終了する。
+    MC -> MC : stopMeasurement()
+    note right of MC
+      終了処理はここで一度だけ実行する
+    end note
+else フォースセンサー再度ON後OFF検出
+    ' フォースセンサー再度ON後OFFを検知したため計測終了。
+    FS --> MC : detected = true
+    MC -> MC : stopMeasurement()
+end
 
 @enduml

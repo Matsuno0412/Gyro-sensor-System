@@ -13,6 +13,8 @@ endlegend
 ' SPIKE-RT APIへの直接依存を隠蔽し、
 ' MeasurementControllerからハードウェア依存を分離する。
 ' 角速度・加速度はAPI仕様に合わせてX/Y/Z軸のfloat[3]で扱う。
+' calibrate() は専用APIの呼び出しではなく、
+' 静止状態の基準値を取得し、ゼロ点補正用の基準として保持する。
 interface ISensorController {
   +initialize(): boolean
   +calibrate(): boolean
@@ -48,6 +50,7 @@ interface IErrorHandler {
 ' SPIKE-RT IMU API実装クラス。
 ' hub_imu_get_angular_velocity(), hub_imu_get_acceleration(),
 ' hub_imu_get_temperature() を利用して生データを取得する。
+' calibrate() では静止状態の基準値を取得し、以降の補正基準として保持する。
 class GyroSensorController {
   +initialize(): boolean
   +calibrate(): boolean
@@ -95,7 +98,7 @@ ErrorHandler .up.|> IErrorHandler
 ' フォースセンサーON後OFFをトリガーとして
 ' 計測開始・終了を制御する。
 ' 初期化失敗やCSV出力失敗を検知した場合は、
-' IErrorHandlerを介して通知し、安全終了処理を行う。
+' handleError()でエラー通知と異常終了要求の設定を行う。
 class MeasurementController {
   -samplingInterval: int = 100
   -isMeasuring: boolean
@@ -114,16 +117,13 @@ class DateTime <<external>> {
 }
 
 ' 1回分のサンプリング結果を保持するデータクラス。
-' APIから取得したfloat型の生データをそのまま保持する。
+' APIから取得したfloat[3]の生データをそのまま保持する。
+' CsvDataOutputがX/Y/Z軸の各列へ展開してCSV出力する。
 ' カラーセンサー検証システムと同様に、日時情報はDateTimeとして保持する。
 class SamplingData {
   -dateTime: DateTime
-  -gyroX: float
-  -gyroY: float
-  -gyroZ: float
-  -accelX: float
-  -accelY: float
-  -accelZ: float
+  -angularVelocity: float[3]
+  -acceleration: float[3]
   -temperature: float
   --
   +SamplingData(angularVelocity: float[3], acceleration: float[3], temperature: float, dt: DateTime)

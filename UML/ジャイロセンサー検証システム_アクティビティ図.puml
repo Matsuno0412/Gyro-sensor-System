@@ -61,11 +61,17 @@ fork again
 
 partition 停止割り込み処理 {
 
-    :フォースセンサー再度ONを検知;
+    repeat
 
-    :フォースセンサーOFFを検知;
+        :フォースセンサー状態と\n異常終了要求フラグを確認;
 
-    :停止要求フラグをtrueにする;
+    repeat while (フォースセンサーON後OFFまたは異常終了要求フラグを検出したか?) is (いいえ) not (はい)
+
+    if (異常終了要求フラグがtrueか?) then (はい)
+        :停止監視を終了;
+    else (いいえ)
+        :停止要求フラグをtrueにする;
+    endif
 
 }
 
@@ -80,3 +86,5 @@ endif
 stop
 
 @enduml
+
+
