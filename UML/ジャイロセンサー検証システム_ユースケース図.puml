@@ -15,6 +15,7 @@ rectangle "ジャイロセンサー検証システム" {
   usecase "キャリブレーションする\n(計測開始前に静止状態で実行)" as UC_calibrate
   usecase "継続的にサンプリング計測する\n(0.1秒周期)" as UC_measure
   usecase "計測を終了する\n(フォースセンサーON後OFF検出)" as UC_stop
+  usecase "エラーを通知して\n安全終了する" as UC_error
 }
 
 ' 利用者の操作とシステムの主目的
@@ -25,13 +26,22 @@ User -- UC_stop
 UC_start ..> UC_calibrate : <<include>>
 UC_start ..> UC_measure : <<include>>
 
+' 異常系の拡張動作
+UC_error ..> UC_start : <<extend>>
+UC_error ..> UC_measure : <<extend>>
+
 note right of UC_measure
   停止操作があるまで
   0.1秒間隔でループ実行し、
   X/Y/Z軸の角速度・加速度・温度を取得して、
   結果を標準出力（CSV形式）する
+  異常値は除外せず、そのまま出力する
+end note
+
+note right of UC_error
+  IMU初期化失敗、フォースセンサー初期化失敗、
+  CSV出力失敗などを通知し、
+  計測を開始しない、または可能な範囲で安全終了する
 end note
 
 @enduml
-
-

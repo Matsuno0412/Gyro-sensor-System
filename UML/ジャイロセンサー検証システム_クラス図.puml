@@ -30,8 +30,15 @@ interface ITriggerSensor {
 
 ' 計測データ出力インターフェース。
 ' CSV出力の方式差し替えなどを可能にする。
+' 出力成功可否をbooleanで返し、CSV出力失敗を検知できるようにする。
 interface IDataOutput {
-  +output(data: SamplingData): void
+  +output(data: SamplingData): boolean
+}
+
+' 異常通知用インターフェース。
+' 初期化失敗やCSV出力失敗などの異常内容を利用者へ通知する。
+interface IErrorHandler {
+  +notifyError(message: String): void
 }
 
 ' =========================================================
@@ -58,8 +65,9 @@ class ForceSensor {
 
 ' SamplingDataをCSV形式へ変換し、
 ' 標準出力へリアルタイム出力する。
+' 出力失敗時はfalseを返し、MeasurementController側で異常通知する。
 class CsvDataOutput {
-  +output(data: SamplingData): void
+  +output(data: SamplingData): boolean
 }
 
 ' 時刻取得およびサンプリング周期制御を担当。
@@ -68,10 +76,16 @@ class Timer {
   +waitInterval(ms: int): void
 }
 
+' 標準出力または標準エラー出力へ異常内容を通知する。
+class ErrorHandler {
+  +notifyError(message: String): void
+}
+
 ' インターフェース実装
 GyroSensorController .up.|> ISensorController
 ForceSensor .up.|> ITriggerSensor
 CsvDataOutput .up.|> IDataOutput
+ErrorHandler .up.|> IErrorHandler
 
 ' =========================================================
 ' 計測制御（システム中枢）
@@ -80,6 +94,8 @@ CsvDataOutput .up.|> IDataOutput
 ' システム全体の計測フロー制御を担当する中枢クラス。
 ' フォースセンサーON後OFFをトリガーとして
 ' 計測開始・終了を制御する。
+' 初期化失敗やCSV出力失敗を検知した場合は、
+' IErrorHandlerを介して通知し、安全終了処理を行う。
 class MeasurementController {
   -samplingInterval: int = 100
   -isMeasuring: boolean
@@ -87,6 +103,7 @@ class MeasurementController {
   -waitForTrigger(): void
   -runMeasurementLoop(): void
   -stopMeasurement(): void
+  -handleError(message: String): void
 }
 
 ' =========================================================
@@ -120,10 +137,9 @@ MeasurementController --> ISensorController
 MeasurementController --> ITriggerSensor
 MeasurementController --> Timer
 MeasurementController --> IDataOutput
+MeasurementController --> IErrorHandler
 MeasurementController ..> SamplingData
 CsvDataOutput ..> SamplingData
 SamplingData ..> DateTime
 
 @enduml
-
-
